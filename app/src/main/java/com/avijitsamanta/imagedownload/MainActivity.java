@@ -11,9 +11,11 @@ import android.app.ProgressDialog;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
+import android.util.Log;
 import android.view.View;
 import android.view.animation.AnimationUtils;
 import android.widget.Button;
@@ -28,12 +30,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
+
 import java.net.URL;
 import java.net.URLConnection;
-import java.text.SimpleDateFormat;
-import java.util.Calendar;
-import java.util.Date;
 
 public class MainActivity extends AppCompatActivity {
     public static final int REQUEST_KEY = 2020;
@@ -58,7 +57,7 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View view) {
                 String url = "https://firebasestorage.googleapis.com/v0/b/waldowalpaper.appspot.com/o/Flowers%2F1593496111386.jpg?alt=media&token=8cbfd479-fd52-45af-86c2-8eff257ca0dd";
 
-                new MyDownloadManager().execute(url);
+                new ImageDownload().execute(url);
             }
         });
 
@@ -85,8 +84,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @SuppressLint("StaticFieldLeak")
-    private class MyDownloadManager extends AsyncTask<String, Integer, Bitmap> {
+    private class ImageDownload extends AsyncTask<String, Integer, String> {
 
         @Override
         protected void onPreExecute() {
@@ -101,28 +99,36 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @Override
-        protected Bitmap doInBackground(String... str) {
-            Bitmap bitmap = null;
+        protected String doInBackground(String... str) {
+            File myImageFile = null;
             try {
                 URL url = new URL(str[0]);
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                URLConnection connection = url.openConnection();
                 connection.connect();
+
+                // getting file length
                 int length = connection.getContentLength();
-                InputStream input = new BufferedInputStream(connection.getInputStream(), 1024);
-                ByteArrayOutputStream output = new ByteArrayOutputStream();
+
+                // input stream to read file - with 8k buffer
+                InputStream input = new BufferedInputStream(url.openStream(), 8192);
+
+                File dir = new File(Environment.getExternalStorageDirectory().getAbsolutePath(), "MY_Images");
+                dir.mkdir();
+                myImageFile = new File(dir, System.currentTimeMillis() + ".jpeg");
+
+                // Output stream to write file
+                @SuppressLint("SdCardPath") OutputStream output = new FileOutputStream(myImageFile);
+                //img = myImageFile.toString();
+
                 byte[] data = new byte[1024];
                 long read = 0;
                 int count;
-
                 while ((count = input.read(data)) != -1) {
                     read += count;
-                    output.write(data, 0, count);
                     publishProgress((int) (read * 100 / length));
-
+                    output.write(data, 0, count);
                 }
-                bitmap = BitmapFactory.decodeByteArray(output.toByteArray(), 0, output.size());
 
-                connection.disconnect();
                 output.flush();
                 output.close();
                 input.close();
@@ -131,8 +137,9 @@ public class MainActivity extends AppCompatActivity {
                 e.printStackTrace();
             }
 
-
-            return bitmap;
+            if (myImageFile != null)
+                return myImageFile.getAbsolutePath();
+            else return null;
         }
 
         @Override
@@ -142,36 +149,12 @@ public class MainActivity extends AppCompatActivity {
         }
 
         @Override
-        protected void onPostExecute(Bitmap bitmap) {
-            super.onPostExecute(bitmap);
-
+        protected void onPostExecute(String s) {
+            super.onPostExecute(s);
             progressDialog.cancel();
-
-            if (bitmap == null) {
-                Toast.makeText(MainActivity.this, "Downloaded file could not be decoded as bitmap", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            imageView.setImageBitmap(bitmap);
-            imageView.setAnimation(AnimationUtils.loadAnimation(MainActivity.this, android.R.anim.fade_in));
-
-
-            File dir = new File(Environment.getExternalStorageDirectory().getAbsolutePath(), "MY_Images");
-            dir.mkdir();
-            File myImageFile = new File(dir, System.currentTimeMillis() + ".jpeg");
-
-            try {
-
-                FileOutputStream outputStream = new FileOutputStream(myImageFile);
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream);
-                outputStream.flush();
-                outputStream.close();
-                Toast.makeText(MainActivity.this, "Image saved as: " + myImageFile.getAbsolutePath(), Toast.LENGTH_SHORT).show();
-
-            } catch (IOException e) {
-                e.printStackTrace();
-                Toast.makeText(MainActivity.this, e.getMessage(), Toast.LENGTH_SHORT).show();
-            }
-
+            imageView.setImageDrawable(Drawable.createFromPath(s));
         }
     }
+
+
 }
